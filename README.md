@@ -1,7 +1,7 @@
 # Spotify Setlist Creator
 Python CLI tool for live music fans. This script automatically finds the most recent live concert setlist for any band using the [setlist.fm](https://www.setlist.fm/) API and generates (or updates) a Spotify playlist with those exact songs. 
 
-## 🛠 Prerequisites
+## Prerequisites
 You will need API access to both Setlist.fm and Spotify.
 
 1. **Setlist.fm API Key:**
