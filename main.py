@@ -31,7 +31,7 @@ def _get_artist_mbid(artist_name: str, headers: dict) -> str | None:
     
     return None
 
-def get_latest_setlist(artist_name: str) -> str:
+def get_latest_setlist(artist_name: str) -> dict:
     """Searches for an artist by MBID and fetches their most recent populated setlist."""
     headers = {
         "x-api-key": SETLIST_FM_API_KEY,
@@ -53,12 +53,12 @@ def get_latest_setlist(artist_name: str) -> str:
     response = requests.get(url, headers=headers, params=params)
     if response.status_code != 200:
         print(f"Error fetching setlist: HTTP {response.status_code}")
-        return None, None
+        return {}
 
     data = response.json()
     if 'setlist' not in data or not data['setlist']:
         print(f"No setlists found for artist: {artist_name}")
-        return None, None
+        return {}
 
     for setlist in data['setlist']:
         songs = []
@@ -71,17 +71,34 @@ def get_latest_setlist(artist_name: str) -> str:
         if songs:
             actual_artist_name = setlist['artist']['name']
             event_date = setlist['eventDate']
-            venue = setlist['venue']['name']
+            venue_def = setlist['venue']
+            venue = venue_def['name']
+            city = venue_def['city']['name']
+            country = venue_def['city']['country']['name']
             
             print(f"Found latest populated setlist: {event_date} at {venue}")
-            return actual_artist_name, songs
+            return {
+                "artist_name": actual_artist_name,
+                "songs": songs,
+                "date": event_date,
+                "venue": venue,
+                "city": city,
+                "country": country
+            }
 
     print("Found recent gigs, but nobody has uploaded the songs for them yet!")
-    return None, None
+    return {}
 
-def create_spotify_playlist(artist, songs) -> None:
+def create_spotify_playlist(setlist_dict: dict) -> None:
     """Searches for tracks and creates or updates a Spotify playlist."""
     print("\nConnecting to Spotify...")
+
+    artist = setlist_dict.get('artist_name', None)
+    songs = setlist_dict.get('songs', [])
+    date = setlist_dict.get('date', None)
+    venue = setlist_dict.get('venue', None)
+    city = setlist_dict.get('city', None)
+    country = setlist_dict.get('country', None)
     
     scope = "playlist-modify-public playlist-read-private"
     sp = spotipy.Spotify(auth_manager=spotipy.SpotifyOAuth(
@@ -93,7 +110,7 @@ def create_spotify_playlist(artist, songs) -> None:
     ))
     
     playlist_name = f"{artist} setlist"
-    playlist_desc = f"Generated playlist from setlist.fm for the upcoming gig of {artist}!"
+    playlist_desc = f"Recent setlist from {artist}'s show at {venue} ({city}, {country}) on {date}. Taken from setlist.fm."
 
     print("Checking your library for existing playlists...")
     existing_playlist_id = None
@@ -170,18 +187,19 @@ def main():
         print("Artist name was not provided!")
         return
 
-    band, setlist = get_latest_setlist(args.artist)
+    setlist_dict = get_latest_setlist(args.artist)
+    artist_name = setlist_dict.get('artist_name', None)
+    if not artist_name:
+        return
+
     # Dummy print
-    print(f"Band: {band}")
+    print(f"Band: {artist_name}")
     print("Setlist:")
-    for i, song in enumerate(setlist):
+    for i, song in enumerate(setlist_dict['songs']):
         print(f"{i}. {song}")
     print()
 
-    if band and setlist:
-        create_spotify_playlist(band, setlist)
-    else:
-        print("Could not retrieve a valid setlist to build the playlist.")
+    create_spotify_playlist(setlist_dict)
 
 if __name__ == "__main__":
     main()
