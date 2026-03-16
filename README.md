@@ -20,7 +20,7 @@ This project uses [uv](https://github.com/astral-sh/uv), better than classic pip
 
 1. **Clone the repository:**
 ```bash
-git clone [https://github.com/YOUR_USERNAME/spotify-setlist-creator.git](https://github.com/YOUR_USERNAME/spotify-setlist-creator.git)
+git clone https://github.com/dvlastnik/spotify_setlist_creator.git
 cd spotify-setlist-creator
 ```
 
