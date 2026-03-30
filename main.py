@@ -42,7 +42,7 @@ def get_latest_setlist(artist_name: str) -> dict:
     mbid = _get_artist_mbid(artist_name, headers)
     if not mbid:
         print(f"Could not find mbid for artist: {artist_name}")
-        return None, None
+        return {}
         
     url = "https://api.setlist.fm/rest/1.0/search/setlists"
     params = {
@@ -89,17 +89,12 @@ def get_latest_setlist(artist_name: str) -> dict:
     print("Found recent gigs, but nobody has uploaded the songs for them yet!")
     return {}
 
-def create_spotify_playlist(setlist_dict: dict) -> None:
+def create_spotify_playlist(setlists: list) -> None:
     """Searches for tracks and creates or updates a Spotify playlist."""
     print("\nConnecting to Spotify...")
 
-    artist = setlist_dict.get('artist_name', None)
-    songs = setlist_dict.get('songs', [])
-    date = setlist_dict.get('date', None)
-    venue = setlist_dict.get('venue', None)
-    city = setlist_dict.get('city', None)
-    country = setlist_dict.get('country', None)
-    
+    artist_names = [s['artist_name'] for s in setlists]
+
     scope = "playlist-modify-public playlist-read-private"
     sp = spotipy.Spotify(auth_manager=spotipy.SpotifyOAuth(
         client_id=SPOTIFY_CLIENT_ID,
@@ -108,9 +103,13 @@ def create_spotify_playlist(setlist_dict: dict) -> None:
         scope=scope,
         show_dialog=True
     ))
-    
-    playlist_name = f"{artist} setlist"
-    playlist_desc = f"Recent setlist from {artist}'s show at {venue} ({city}, {country}) on {date}. Taken from setlist.fm."
+
+    playlist_name = f"{setlists[-1]['artist_name']} setlist"
+    if len(setlists) == 1:
+        s = setlists[0]
+        playlist_desc = f"Recent setlist from {s['artist_name']}'s show at {s['venue']} ({s['city']}, {s['country']}) on {s['date']}. Taken from setlist.fm."
+    else:
+        playlist_desc = f"Setlists from: {', '.join(artist_names)}. Taken from setlist.fm."
 
     print("Checking your library for existing playlists...")
     existing_playlist_id = None
@@ -120,7 +119,7 @@ def create_spotify_playlist(setlist_dict: dict) -> None:
             if playlist['name'] == playlist_name:
                 existing_playlist_id = playlist['id']
                 break
-        
+
         if existing_playlist_id or not playlists['next']:
             break
         playlists = sp.next(playlists)
@@ -132,33 +131,37 @@ def create_spotify_playlist(setlist_dict: dict) -> None:
     else:
         print(f"Creating new playlist: '{playlist_name}'")
         new_playlist = sp.current_user_playlist_create(
-            name=playlist_name, 
-            public=True, 
+            name=playlist_name,
+            public=True,
             description=playlist_desc
         )
         target_playlist_id = new_playlist['id']
 
     track_uris = []
     print("Searching for tracks on Spotify...")
-    for song in songs:
-        query = f"artist:{artist} track:{song}"
-        result = sp.search(q=query, type='track', limit=1)
-        
-        items = result['tracks']['items']
-        if items:
-            track_uris.append(items[0]['uri'])
-            print(f" [+] Found: {song}")
-        else:
-            fallback_query = f"track:{song}"
-            fallback_result = sp.search(q=fallback_query, type='track', limit=1)
-            
-            fallback_items = fallback_result['tracks']['items']
-            if fallback_items:
-                track_uris.append(fallback_items[0]['uri'])
-                found_artist = fallback_items[0]['artists'][0]['name']
-                print(f" [~] Found (Fallback): {song} (Matched to: {found_artist})")
+    for setlist_dict in setlists:
+        artist = setlist_dict['artist_name']
+        if len(setlists) > 1:
+            print(f"\n--- {artist} ---")
+        for song in setlist_dict['songs']:
+            query = f"artist:{artist} track:{song}"
+            result = sp.search(q=query, type='track', limit=1)
+
+            items = result['tracks']['items']
+            if items:
+                track_uris.append(items[0]['uri'])
+                print(f" [+] Found: {song}")
             else:
-                print(f" [-] Missing: {song} (Could not find on Spotify at all)")
+                fallback_query = f"track:{song}"
+                fallback_result = sp.search(q=fallback_query, type='track', limit=1)
+
+                fallback_items = fallback_result['tracks']['items']
+                if fallback_items:
+                    track_uris.append(fallback_items[0]['uri'])
+                    found_artist = fallback_items[0]['artists'][0]['name']
+                    print(f" [~] Found (Fallback): {song} (Matched to: {found_artist})")
+                else:
+                    print(f" [-] Missing: {song} (Could not find on Spotify at all)")
 
     if track_uris:
         sp.playlist_replace_items(playlist_id=target_playlist_id, items=track_uris[:100])
@@ -187,19 +190,25 @@ def main():
         print("Artist name was not provided!")
         return
 
-    setlist_dict = get_latest_setlist(args.artist)
-    artist_name = setlist_dict.get('artist_name', None)
-    if not artist_name:
+    artists = [a.strip() for a in args.artist.split(",")]
+
+    setlists = []
+    for artist in artists:
+        setlist_dict = get_latest_setlist(artist)
+        if not setlist_dict.get('artist_name'):
+            continue
+        print(f"Band: {setlist_dict['artist_name']}")
+        print("Setlist:")
+        for i, song in enumerate(setlist_dict['songs']):
+            print(f"{i}. {song}")
+        print()
+        setlists.append(setlist_dict)
+
+    if not setlists:
+        print("No setlists found for any of the provided artists.")
         return
 
-    # Dummy print
-    print(f"Band: {artist_name}")
-    print("Setlist:")
-    for i, song in enumerate(setlist_dict['songs']):
-        print(f"{i}. {song}")
-    print()
-
-    create_spotify_playlist(setlist_dict)
+    create_spotify_playlist(setlists)
 
 if __name__ == "__main__":
     main()
