@@ -89,7 +89,7 @@ def get_latest_setlist(artist_name: str) -> dict:
     print("Found recent gigs, but nobody has uploaded the songs for them yet!")
     return {}
 
-def create_spotify_playlist(setlists: list) -> None:
+def create_spotify_playlist(setlists: list, playlist_name: str | None = None) -> None:
     """Searches for tracks and creates or updates a Spotify playlist."""
     print("\nConnecting to Spotify...")
 
@@ -104,7 +104,8 @@ def create_spotify_playlist(setlists: list) -> None:
         show_dialog=True
     ))
 
-    playlist_name = f"{setlists[-1]['artist_name']} setlist"
+    if playlist_name is None:
+        playlist_name = f"{setlists[-1]['artist_name']} setlist"
     if len(setlists) == 1:
         s = setlists[0]
         playlist_desc = f"Recent setlist from {s['artist_name']}'s show at {s['venue']} ({s['city']}, {s['country']}) on {s['date']}. Taken from setlist.fm."
@@ -180,6 +181,12 @@ def parse_args():
         type=str,
         help="Artist name"
     )
+    parser.add_argument(
+        "--playlist-name",
+        type=str,
+        default=None,
+        help="Custom name for the Spotify playlist (optional)"
+    )
 
     return parser.parse_args()
 
@@ -208,7 +215,7 @@ def main():
         print("No setlists found for any of the provided artists.")
         return
 
-    create_spotify_playlist(setlists)
+    create_spotify_playlist(setlists, playlist_name=args.playlist_name)
 
 if __name__ == "__main__":
     main()
